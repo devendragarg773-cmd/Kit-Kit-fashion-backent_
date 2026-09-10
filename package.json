@@ -1,0 +1,14 @@
+{
+  "name": "kit-kit-fashion-backend",
+  "version": "1.0.0",
+  "description": "Kit Kit Fashion backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "better-sqlite3": "^11.8.1"
+  }
+}
