@@ -1,6 +1,5 @@
 const express = require("express");
 const cors = require("cors");
-const crypto = require("crypto");
 const Database = require("better-sqlite3");
 
 const app = express();
@@ -25,11 +24,6 @@ db.pragma("journal_mode = WAL");
 // OWNER SETTINGS
 // ===============================
 
-const OWNER_MOBILE = "9530450140";
-
-// Owner password Render Environment Variable se aayega.
-// Example Render:
-// OWNER_PASSWORD = your-secret-password
 const OWNER_PASSWORD = process.env.OWNER_PASSWORD;
 
 // ===============================
@@ -92,6 +86,7 @@ const productCount = db
     .get().count;
 
 if (productCount === 0) {
+
     const insert = db.prepare(`
         INSERT INTO products
         (name, price, image, description, category, stock)
@@ -140,10 +135,12 @@ if (productCount === 0) {
 // ===============================
 
 app.get("/", (req, res) => {
+
     res.json({
         success: true,
         message: "Kit Kit Fashion Backend is running 🚀"
     });
+
 });
 
 // =====================================================
@@ -153,7 +150,9 @@ app.get("/", (req, res) => {
 // GET PRODUCTS
 
 app.get("/api/products", (req, res) => {
+
     try {
+
         const products = db
             .prepare("SELECT * FROM products ORDER BY id DESC")
             .all();
@@ -161,19 +160,25 @@ app.get("/api/products", (req, res) => {
         res.json(products);
 
     } catch (error) {
+
         console.error(error);
 
         res.status(500).json({
             success: false,
             message: "Products load nahi ho paye"
         });
+
     }
+
 });
+
 
 // ADD PRODUCT
 
 app.post("/api/products", (req, res) => {
+
     try {
+
         const {
             name,
             price,
@@ -184,10 +189,12 @@ app.post("/api/products", (req, res) => {
         } = req.body;
 
         if (!name || price === undefined) {
+
             return res.status(400).json({
                 success: false,
                 message: "Product name aur price required hai"
             });
+
         }
 
         const result = db.prepare(`
@@ -213,19 +220,25 @@ app.post("/api/products", (req, res) => {
         });
 
     } catch (error) {
+
         console.error(error);
 
         res.status(500).json({
             success: false,
             message: "Product add nahi hua"
         });
+
     }
+
 });
+
 
 // UPDATE PRODUCT
 
 app.put("/api/products/:id", (req, res) => {
+
     try {
+
         const id = req.params.id;
 
         const {
@@ -258,10 +271,12 @@ app.put("/api/products/:id", (req, res) => {
         );
 
         if (result.changes === 0) {
+
             return res.status(404).json({
                 success: false,
                 message: "Product nahi mila"
             });
+
         }
 
         res.json({
@@ -270,19 +285,25 @@ app.put("/api/products/:id", (req, res) => {
         });
 
     } catch (error) {
+
         console.error(error);
 
         res.status(500).json({
             success: false,
             message: "Product update nahi hua"
         });
+
     }
+
 });
+
 
 // DELETE PRODUCT
 
 app.delete("/api/products/:id", (req, res) => {
+
     try {
+
         const id = req.params.id;
 
         const result = db
@@ -290,10 +311,12 @@ app.delete("/api/products/:id", (req, res) => {
             .run(id);
 
         if (result.changes === 0) {
+
             return res.status(404).json({
                 success: false,
                 message: "Product nahi mila"
             });
+
         }
 
         res.json({
@@ -302,13 +325,16 @@ app.delete("/api/products/:id", (req, res) => {
         });
 
     } catch (error) {
+
         console.error(error);
 
         res.status(500).json({
             success: false,
             message: "Product delete nahi hua"
         });
+
     }
+
 });
 
 // =====================================================
@@ -318,7 +344,9 @@ app.delete("/api/products/:id", (req, res) => {
 // ADD CUSTOMER
 
 app.post("/api/customers", (req, res) => {
+
     try {
+
         const {
             name,
             mobile,
@@ -326,10 +354,12 @@ app.post("/api/customers", (req, res) => {
         } = req.body;
 
         if (!mobile) {
+
             return res.status(400).json({
                 success: false,
                 message: "Mobile required hai"
             });
+
         }
 
         const existing = db
@@ -337,10 +367,12 @@ app.post("/api/customers", (req, res) => {
             .get(mobile);
 
         if (existing) {
+
             return res.json({
                 success: true,
                 customer: existing
             });
+
         }
 
         const result = db.prepare(`
@@ -363,19 +395,25 @@ app.post("/api/customers", (req, res) => {
         });
 
     } catch (error) {
+
         console.error(error);
 
         res.status(500).json({
             success: false,
             message: "Customer save nahi hua"
         });
+
     }
+
 });
+
 
 // GET CUSTOMERS
 
 app.get("/api/customers", (req, res) => {
+
     try {
+
         const customers = db
             .prepare("SELECT * FROM customers ORDER BY id DESC")
             .all();
@@ -383,19 +421,25 @@ app.get("/api/customers", (req, res) => {
         res.json(customers);
 
     } catch (error) {
+
         console.error(error);
 
         res.status(500).json({
             success: false,
             message: "Customers load nahi hue"
         });
+
     }
+
 });
+
 
 // CUSTOMER COUNT
 
 app.get("/api/customers/count", (req, res) => {
+
     try {
+
         const result = db
             .prepare("SELECT COUNT(*) AS count FROM customers")
             .get();
@@ -403,13 +447,16 @@ app.get("/api/customers/count", (req, res) => {
         res.json(result);
 
     } catch (error) {
+
         console.error(error);
 
         res.status(500).json({
             success: false,
             message: "Customer count nahi mila"
         });
+
     }
+
 });
 
 // =====================================================
@@ -419,7 +466,9 @@ app.get("/api/customers/count", (req, res) => {
 // CREATE ORDER
 
 app.post("/api/orders", (req, res) => {
+
     try {
+
         const {
             customer_id,
             total,
@@ -428,10 +477,12 @@ app.post("/api/orders", (req, res) => {
         } = req.body;
 
         if (!total || !items || !Array.isArray(items)) {
+
             return res.status(400).json({
                 success: false,
                 message: "Order information incomplete hai"
             });
+
         }
 
         const createOrder = db.transaction(() => {
@@ -456,15 +507,18 @@ app.post("/api/orders", (req, res) => {
             `);
 
             for (const item of items) {
+
                 insertItem.run(
                     orderId,
                     item.product_id,
                     Number(item.quantity || 1),
                     Number(item.price || 0)
                 );
+
             }
 
             return orderId;
+
         });
 
         const orderId = createOrder();
@@ -476,19 +530,25 @@ app.post("/api/orders", (req, res) => {
         });
 
     } catch (error) {
+
         console.error(error);
 
         res.status(500).json({
             success: false,
             message: "Order create nahi hua"
         });
+
     }
+
 });
+
 
 // GET ORDERS
 
 app.get("/api/orders", (req, res) => {
+
     try {
+
         const orders = db.prepare(`
             SELECT
                 orders.*,
@@ -503,19 +563,25 @@ app.get("/api/orders", (req, res) => {
         res.json(orders);
 
     } catch (error) {
+
         console.error(error);
 
         res.status(500).json({
             success: false,
             message: "Orders load nahi hue"
         });
+
     }
+
 });
+
 
 // UPDATE ORDER STATUS
 
 app.put("/api/orders/:id/status", (req, res) => {
+
     try {
+
         const id = req.params.id;
         const { status } = req.body;
 
@@ -526,10 +592,12 @@ app.put("/api/orders/:id/status", (req, res) => {
         `).run(status, id);
 
         if (result.changes === 0) {
+
             return res.status(404).json({
                 success: false,
                 message: "Order nahi mila"
             });
+
         }
 
         res.json({
@@ -538,13 +606,16 @@ app.put("/api/orders/:id/status", (req, res) => {
         });
 
     } catch (error) {
+
         console.error(error);
 
         res.status(500).json({
             success: false,
             message: "Status update nahi hua"
         });
+
     }
+
 });
 
 // =====================================================
@@ -554,7 +625,9 @@ app.put("/api/orders/:id/status", (req, res) => {
 // ADD COMPLAINT
 
 app.post("/api/complaints", (req, res) => {
+
     try {
+
         const {
             customer_name,
             mobile,
@@ -562,10 +635,12 @@ app.post("/api/complaints", (req, res) => {
         } = req.body;
 
         if (!message) {
+
             return res.status(400).json({
                 success: false,
                 message: "Complaint message required hai"
             });
+
         }
 
         const result = db.prepare(`
@@ -585,19 +660,25 @@ app.post("/api/complaints", (req, res) => {
         });
 
     } catch (error) {
+
         console.error(error);
 
         res.status(500).json({
             success: false,
             message: "Complaint save nahi hui"
         });
+
     }
+
 });
+
 
 // GET COMPLAINTS
 
 app.get("/api/complaints", (req, res) => {
+
     try {
+
         const complaints = db
             .prepare("SELECT * FROM complaints ORDER BY id DESC")
             .all();
@@ -605,13 +686,16 @@ app.get("/api/complaints", (req, res) => {
         res.json(complaints);
 
     } catch (error) {
+
         console.error(error);
 
         res.status(500).json({
             success: false,
             message: "Complaints load nahi hui"
         });
+
     }
+
 });
 
 // =====================================================
@@ -619,7 +703,9 @@ app.get("/api/complaints", (req, res) => {
 // =====================================================
 
 app.get("/api/sales", (req, res) => {
+
     try {
+
         const result = db.prepare(`
             SELECT
                 COUNT(*) AS total_orders,
@@ -631,13 +717,16 @@ app.get("/api/sales", (req, res) => {
         res.json(result);
 
     } catch (error) {
+
         console.error(error);
 
         res.status(500).json({
             success: false,
             message: "Sales data load nahi hua"
         });
+
     }
+
 });
 
 // =====================================================
@@ -645,81 +734,61 @@ app.get("/api/sales", (req, res) => {
 // =====================================================
 
 app.post("/api/owner/login", (req, res) => {
+
     try {
-        const {
-            mobile,
-            password
-        } = req.body;
 
-        // Check mobile
-        if (!mobile) {
-            return res.status(400).json({
-                success: false,
-                message: "Owner mobile number required hai"
-            });
-        }
+        const { password } = req.body;
 
-        // Check password
         if (!password) {
+
             return res.status(400).json({
                 success: false,
-                message: "Owner password required hai"
+                message: "Password required"
             });
+
         }
 
-        // Check server password configured
         if (!OWNER_PASSWORD) {
-            console.error("OWNER_PASSWORD Render Environment Variable missing");
+
+            console.error(
+                "OWNER_PASSWORD environment variable is missing."
+            );
 
             return res.status(500).json({
                 success: false,
-                message: "Owner login server par configure nahi hai"
+                message: "Owner password server par configure nahi hai"
             });
+
         }
 
-        // Owner mobile check
-        if (String(mobile).trim() !== OWNER_MOBILE) {
-            return res.status(403).json({
-                success: false,
-                message: "Owner number allowed nahi hai"
-            });
-        }
+        if (password !== OWNER_PASSWORD) {
 
-        // Secure password comparison
-        const enteredPassword = Buffer.from(String(password));
-        const correctPassword = Buffer.from(String(OWNER_PASSWORD));
-
-        let passwordMatch = false;
-
-        if (enteredPassword.length === correctPassword.length) {
-            passwordMatch = crypto.timingSafeEqual(
-                enteredPassword,
-                correctPassword
-            );
-        }
-
-        if (!passwordMatch) {
             return res.status(401).json({
                 success: false,
-                message: "Incorrect owner password"
+                message: "Wrong owner password"
             });
+
         }
 
-        // Login successful
         res.json({
             success: true,
-            message: "Owner login successful",
-            owner: true
+            message: "Owner login successful"
         });
 
     } catch (error) {
-        console.error("Owner Login Error:", error);
+
+        console.error(
+            "Owner Login Error:",
+            error
+        );
 
         res.status(500).json({
             success: false,
             message: "Owner login server error"
         });
+
     }
+
 });
 
 // =====================================================
@@ -727,7 +796,9 @@ app.post("/api/owner/login", (req, res) => {
 // =====================================================
 
 app.listen(PORT, () => {
+
     console.log(
         `Kit Kit Fashion Backend running on port ${PORT}`
     );
+
 });
