@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const crypto = require("crypto");
 const Database = require("better-sqlite3");
 
 const app = express();
@@ -8,12 +9,14 @@ const PORT = process.env.PORT || 10000;
 // ===============================
 // MIDDLEWARE
 // ===============================
+
 app.use(cors());
 app.use(express.json());
 
 // ===============================
 // DATABASE
 // ===============================
+
 const db = new Database("shop.db");
 
 db.pragma("journal_mode = WAL");
@@ -21,10 +24,13 @@ db.pragma("journal_mode = WAL");
 // ===============================
 // OWNER SETTINGS
 // ===============================
+
 const OWNER_MOBILE = "9530450140";
 
-const MSG91_AUTHKEY = process.env.MSG91_AUTHKEY;
-const MSG91_TEMPLATE_ID = process.env.MSG91_TEMPLATE_ID;
+// Owner password Render Environment Variable se aayega.
+// Example Render:
+// OWNER_PASSWORD = your-secret-password
+const OWNER_PASSWORD = process.env.OWNER_PASSWORD;
 
 // ===============================
 // TABLES
@@ -145,6 +151,7 @@ app.get("/", (req, res) => {
 // =====================================================
 
 // GET PRODUCTS
+
 app.get("/api/products", (req, res) => {
     try {
         const products = db
@@ -152,6 +159,7 @@ app.get("/api/products", (req, res) => {
             .all();
 
         res.json(products);
+
     } catch (error) {
         console.error(error);
 
@@ -163,6 +171,7 @@ app.get("/api/products", (req, res) => {
 });
 
 // ADD PRODUCT
+
 app.post("/api/products", (req, res) => {
     try {
         const {
@@ -214,6 +223,7 @@ app.post("/api/products", (req, res) => {
 });
 
 // UPDATE PRODUCT
+
 app.put("/api/products/:id", (req, res) => {
     try {
         const id = req.params.id;
@@ -270,6 +280,7 @@ app.put("/api/products/:id", (req, res) => {
 });
 
 // DELETE PRODUCT
+
 app.delete("/api/products/:id", (req, res) => {
     try {
         const id = req.params.id;
@@ -305,6 +316,7 @@ app.delete("/api/products/:id", (req, res) => {
 // =====================================================
 
 // ADD CUSTOMER
+
 app.post("/api/customers", (req, res) => {
     try {
         const {
@@ -361,6 +373,7 @@ app.post("/api/customers", (req, res) => {
 });
 
 // GET CUSTOMERS
+
 app.get("/api/customers", (req, res) => {
     try {
         const customers = db
@@ -380,6 +393,7 @@ app.get("/api/customers", (req, res) => {
 });
 
 // CUSTOMER COUNT
+
 app.get("/api/customers/count", (req, res) => {
     try {
         const result = db
@@ -403,6 +417,7 @@ app.get("/api/customers/count", (req, res) => {
 // =====================================================
 
 // CREATE ORDER
+
 app.post("/api/orders", (req, res) => {
     try {
         const {
@@ -471,6 +486,7 @@ app.post("/api/orders", (req, res) => {
 });
 
 // GET ORDERS
+
 app.get("/api/orders", (req, res) => {
     try {
         const orders = db.prepare(`
@@ -497,6 +513,7 @@ app.get("/api/orders", (req, res) => {
 });
 
 // UPDATE ORDER STATUS
+
 app.put("/api/orders/:id/status", (req, res) => {
     try {
         const id = req.params.id;
@@ -535,6 +552,7 @@ app.put("/api/orders/:id/status", (req, res) => {
 // =====================================================
 
 // ADD COMPLAINT
+
 app.post("/api/complaints", (req, res) => {
     try {
         const {
@@ -577,6 +595,7 @@ app.post("/api/complaints", (req, res) => {
 });
 
 // GET COMPLAINTS
+
 app.get("/api/complaints", (req, res) => {
     try {
         const complaints = db
@@ -622,139 +641,83 @@ app.get("/api/sales", (req, res) => {
 });
 
 // =====================================================
-// OWNER - SEND OTP
+// OWNER - PASSWORD LOGIN
 // =====================================================
 
-app.post("/api/owner/send-otp", async (req, res) => {
-    try {
-        const { mobile } = req.body;
-
-        if (!mobile) {
-            return res.status(400).json({
-                success: false,
-                message: "Mobile number required"
-            });
-        }
-
-        if (mobile !== OWNER_MOBILE) {
-            return res.status(403).json({
-                success: false,
-                message: "Owner number allowed nahi hai"
-            });
-        }
-
-        if (!MSG91_AUTHKEY || !MSG91_TEMPLATE_ID) {
-            return res.status(500).json({
-                success: false,
-                message: "MSG91 server par configure nahi hai"
-            });
-        }
-
-        const response = await fetch(
-            `https://control.msg91.com/api/v5/otp?template_id=${encodeURIComponent(
-                MSG91_TEMPLATE_ID
-            )}&mobile=91${OWNER_MOBILE}`,
-            {
-                method: "POST",
-                headers: {
-                    authkey: MSG91_AUTHKEY,
-                    "Content-Type": "application/json"
-                }
-            }
-        );
-
-        const data = await response.json();
-
-        console.log("MSG91 Send OTP:", data);
-
-        if (!response.ok || data.type !== "success") {
-            return res.status(500).json({
-                success: false,
-                message: "OTP send nahi ho paya"
-            });
-        }
-
-        res.json({
-            success: true,
-            message: "OTP sent successfully"
-        });
-
-    } catch (error) {
-        console.error("Send OTP Error:", error);
-
-        res.status(500).json({
-            success: false,
-            message: "OTP server error"
-        });
-    }
-});
-
-// =====================================================
-// OWNER - VERIFY OTP
-// =====================================================
-
-app.post("/api/owner/verify-otp", async (req, res) => {
+app.post("/api/owner/login", (req, res) => {
     try {
         const {
             mobile,
-            otp
+            password
         } = req.body;
 
-        if (!mobile || !otp) {
+        // Check mobile
+        if (!mobile) {
             return res.status(400).json({
                 success: false,
-                message: "Mobile aur OTP required hai"
+                message: "Owner mobile number required hai"
             });
         }
 
-        if (mobile !== OWNER_MOBILE) {
+        // Check password
+        if (!password) {
+            return res.status(400).json({
+                success: false,
+                message: "Owner password required hai"
+            });
+        }
+
+        // Check server password configured
+        if (!OWNER_PASSWORD) {
+            console.error("OWNER_PASSWORD Render Environment Variable missing");
+
+            return res.status(500).json({
+                success: false,
+                message: "Owner login server par configure nahi hai"
+            });
+        }
+
+        // Owner mobile check
+        if (String(mobile).trim() !== OWNER_MOBILE) {
             return res.status(403).json({
                 success: false,
                 message: "Owner number allowed nahi hai"
             });
         }
 
-        if (!MSG91_AUTHKEY) {
-            return res.status(500).json({
-                success: false,
-                message: "MSG91 server par configure nahi hai"
-            });
+        // Secure password comparison
+        const enteredPassword = Buffer.from(String(password));
+        const correctPassword = Buffer.from(String(OWNER_PASSWORD));
+
+        let passwordMatch = false;
+
+        if (enteredPassword.length === correctPassword.length) {
+            passwordMatch = crypto.timingSafeEqual(
+                enteredPassword,
+                correctPassword
+            );
         }
 
-        const response = await fetch(
-            `https://control.msg91.com/api/v5/otp/verify?otp=${encodeURIComponent(
-                otp
-            )}&mobile=91${OWNER_MOBILE}`,
-            {
-                method: "GET",
-                headers: {
-                    authkey: MSG91_AUTHKEY
-                }
-            }
-        );
-
-        const data = await response.json();
-
-        console.log("MSG91 Verify OTP:", data);
-
-        if (!response.ok || data.type !== "success") {
+        if (!passwordMatch) {
             return res.status(401).json({
                 success: false,
-                message: "Invalid ya expired OTP"
+                message: "Incorrect owner password"
             });
         }
 
+        // Login successful
         res.json({
             success: true,
-            message: "Owner login successful"
+            message: "Owner login successful",
+            owner: true
         });
 
     } catch (error) {
-        console.error("Verify OTP Error:", error);
+        console.error("Owner Login Error:", error);
 
         res.status(500).json({
             success: false,
-            message: "OTP verification error"
+            message: "Owner login server error"
         });
     }
 });
@@ -764,5 +727,7 @@ app.post("/api/owner/verify-otp", async (req, res) => {
 // =====================================================
 
 app.listen(PORT, () => {
-    console.log(`Kit Kit Fashion Backend running on port ${PORT}`);
+    console.log(
+        `Kit Kit Fashion Backend running on port ${PORT}`
+    );
 });
