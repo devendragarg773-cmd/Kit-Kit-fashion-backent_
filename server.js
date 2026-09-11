@@ -3,477 +3,766 @@ const cors = require("cors");
 const Database = require("better-sqlite3");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
+// ===============================
+// MIDDLEWARE
+// ===============================
 app.use(cors());
 app.use(express.json());
 
+// ===============================
+// DATABASE
+// ===============================
 const db = new Database("shop.db");
 
-db.pragma("foreign_keys = ON");
+db.pragma("journal_mode = WAL");
 
-/* =========================
-   DATABASE TABLES
-========================= */
+// ===============================
+// OWNER SETTINGS
+// ===============================
+const OWNER_MOBILE = "9530450140";
+
+const MSG91_AUTHKEY = process.env.MSG91_AUTHKEY;
+const MSG91_TEMPLATE_ID = process.env.MSG91_TEMPLATE_ID;
+
+// ===============================
+// TABLES
+// ===============================
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     price REAL NOT NULL,
-    mrp REAL,
-    rating REAL,
     image TEXT,
     description TEXT,
-    stock INTEGER DEFAULT 0
+    category TEXT,
+    stock INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS customers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    mobile TEXT NOT NULL UNIQUE,
-    address TEXT,
+    name TEXT,
+    mobile TEXT UNIQUE,
+    email TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_id INTEGER NOT NULL,
+    customer_id INTEGER,
     total REAL NOT NULL,
     status TEXT DEFAULT 'Pending',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(customer_id) REFERENCES customers(id)
+    address TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    order_id INTEGER NOT NULL,
-    product_id INTEGER NOT NULL,
-    quantity INTEGER NOT NULL,
-    price REAL NOT NULL,
-    FOREIGN KEY(order_id) REFERENCES orders(id),
-    FOREIGN KEY(product_id) REFERENCES products(id)
+    order_id INTEGER,
+    product_id INTEGER,
+    quantity INTEGER,
+    price REAL
 );
 
 CREATE TABLE IF NOT EXISTS complaints (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_name TEXT,
     mobile TEXT,
-    message TEXT NOT NULL,
+    message TEXT,
+    status TEXT DEFAULT 'Open',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 `);
 
-
-/* =========================
-   DEMO PRODUCTS
-========================= */
+// ===============================
+// DEMO PRODUCTS
+// ===============================
 
 const productCount = db
     .prepare("SELECT COUNT(*) AS count FROM products")
-    .get();
+    .get().count;
 
-if (productCount.count === 0) {
-
+if (productCount === 0) {
     const insert = db.prepare(`
         INSERT INTO products
-        (name, price, mrp, rating, image, description, stock)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        (name, price, image, description, category, stock)
+        VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     insert.run(
-        "Classic Oversized T-Shirt",
-        799,
-        1199,
-        4.5,
-        "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=700&q=80",
-        "Comfortable premium oversized T-shirt.",
-        50
-    );
-
-    insert.run(
-        "Premium Casual Shirt",
-        1299,
-        1799,
-        4.6,
-        "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?auto=format&fit=crop&w=700&q=80",
-        "Premium casual shirt for everyday style.",
-        30
-    );
-
-    insert.run(
-        "Everyday Hoodie",
-        1499,
-        2199,
-        4.7,
-        "https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&w=700&q=80",
-        "Soft and comfortable everyday hoodie.",
-        25
-    );
-
-    insert.run(
-        "Relaxed Fit Jeans",
-        1599,
-        2299,
-        4.4,
-        "https://images.unsplash.com/photo-1542272604-787c3835535d?auto=format&fit=crop&w=700&q=80",
-        "Relaxed fit jeans with comfortable styling.",
+        "Stylish T-Shirt",
+        499,
+        "https://via.placeholder.com/300",
+        "Premium quality stylish T-Shirt",
+        "T-Shirts",
         20
+    );
+
+    insert.run(
+        "Classic Shirt",
+        799,
+        "https://via.placeholder.com/300",
+        "Comfortable classic shirt",
+        "Shirts",
+        15
+    );
+
+    insert.run(
+        "Fashion Jeans",
+        999,
+        "https://via.placeholder.com/300",
+        "Trendy fashion jeans",
+        "Jeans",
+        10
+    );
+
+    insert.run(
+        "Hoodie",
+        899,
+        "https://via.placeholder.com/300",
+        "Warm and stylish hoodie",
+        "Hoodies",
+        12
     );
 }
 
-
-/* =========================
-   HOME
-========================= */
+// ===============================
+// HOME / HEALTH CHECK
+// ===============================
 
 app.get("/", (req, res) => {
     res.json({
-        message: "Kit Kit Fashion Backend is running!"
+        success: true,
+        message: "Kit Kit Fashion Backend is running 🚀"
     });
 });
 
+// =====================================================
+// PRODUCTS
+// =====================================================
 
-/* =========================
-   PRODUCTS
-========================= */
-
+// GET PRODUCTS
 app.get("/api/products", (req, res) => {
+    try {
+        const products = db
+            .prepare("SELECT * FROM products ORDER BY id DESC")
+            .all();
 
-    const products = db
-        .prepare("SELECT * FROM products ORDER BY id DESC")
-        .all();
+        res.json(products);
+    } catch (error) {
+        console.error(error);
 
-    res.json(products);
+        res.status(500).json({
+            success: false,
+            message: "Products load nahi ho paye"
+        });
+    }
 });
 
-
+// ADD PRODUCT
 app.post("/api/products", (req, res) => {
-
-    const {
-        name,
-        price,
-        mrp,
-        rating,
-        image,
-        description,
-        stock
-    } = req.body;
-
-    if (!name || price === undefined) {
-        return res.status(400).json({
-            error: "Name and price required"
-        });
-    }
-
-    const result = db.prepare(`
-        INSERT INTO products
-        (name, price, mrp, rating, image, description, stock)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-        name,
-        price,
-        mrp || null,
-        rating || 0,
-        image || "",
-        description || "",
-        stock || 0
-    );
-
-    res.json({
-        success: true,
-        id: result.lastInsertRowid
-    });
-});
-
-
-/* =========================
-   CUSTOMERS
-========================= */
-
-app.post("/api/customers", (req, res) => {
-
-    const {
-        name,
-        mobile,
-        address
-    } = req.body;
-
-    if (!name || !mobile) {
-        return res.status(400).json({
-            error: "Name and mobile required"
-        });
-    }
-
-    const existing = db
-        .prepare(
-            "SELECT * FROM customers WHERE mobile = ?"
-        )
-        .get(mobile);
-
-    if (existing) {
-
-        db.prepare(`
-            UPDATE customers
-            SET name = ?, address = ?
-            WHERE mobile = ?
-        `).run(
+    try {
+        const {
             name,
-            address || "",
-            mobile
-        );
+            price,
+            image,
+            description,
+            category,
+            stock
+        } = req.body;
 
-        return res.json({
-            success: true,
-            customer: existing
-        });
-    }
-
-    const result = db.prepare(`
-        INSERT INTO customers
-        (name, mobile, address)
-        VALUES (?, ?, ?)
-    `).run(
-        name,
-        mobile,
-        address || ""
-    );
-
-    const customer = db
-        .prepare(
-            "SELECT * FROM customers WHERE id = ?"
-        )
-        .get(result.lastInsertRowid);
-
-    res.json({
-        success: true,
-        customer
-    });
-});
-
-
-app.get("/api/customers", (req, res) => {
-
-    const customers = db.prepare(`
-        SELECT
-            c.*,
-            COUNT(o.id) AS total_orders
-        FROM customers c
-        LEFT JOIN orders o
-        ON c.id = o.customer_id
-        GROUP BY c.id
-        ORDER BY c.id DESC
-    `).all();
-
-    res.json(customers);
-});
-
-
-app.get("/api/customers/count", (req, res) => {
-
-    const result = db
-        .prepare(
-            "SELECT COUNT(*) AS count FROM customers"
-        )
-        .get();
-
-    res.json(result);
-});
-
-
-/* =========================
-   ORDERS
-========================= */
-
-app.post("/api/orders", (req, res) => {
-
-    const {
-        customerId,
-        items
-    } = req.body;
-
-    if (!customerId || !Array.isArray(items) || !items.length) {
-        return res.status(400).json({
-            error: "Customer and items required"
-        });
-    }
-
-    let total = 0;
-
-    const productQuery = db.prepare(
-        "SELECT * FROM products WHERE id = ?"
-    );
-
-    for (const item of items) {
-
-        const product = productQuery.get(
-            item.productId
-        );
-
-        if (!product) {
+        if (!name || price === undefined) {
             return res.status(400).json({
-                error: `Product ${item.productId} not found`
+                success: false,
+                message: "Product name aur price required hai"
             });
         }
 
-        total +=
-            product.price *
-            item.quantity;
-    }
-
-    const createOrder = db.prepare(`
-        INSERT INTO orders
-        (customer_id, total)
-        VALUES (?, ?)
-    `);
-
-    const orderResult = createOrder.run(
-        customerId,
-        total
-    );
-
-    const orderId =
-        orderResult.lastInsertRowid;
-
-    const insertItem = db.prepare(`
-        INSERT INTO order_items
-        (order_id, product_id, quantity, price)
-        VALUES (?, ?, ?, ?)
-    `);
-
-    for (const item of items) {
-
-        const product =
-            productQuery.get(item.productId);
-
-        insertItem.run(
-            orderId,
-            product.id,
-            item.quantity,
-            product.price
+        const result = db.prepare(`
+            INSERT INTO products
+            (name, price, image, description, category, stock)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+            name,
+            Number(price),
+            image || "",
+            description || "",
+            category || "",
+            Number(stock || 0)
         );
-    }
 
-    res.json({
-        success: true,
-        orderId,
-        total
-    });
-});
+        const product = db
+            .prepare("SELECT * FROM products WHERE id = ?")
+            .get(result.lastInsertRowid);
 
+        res.json({
+            success: true,
+            product
+        });
 
-app.get("/api/orders", (req, res) => {
+    } catch (error) {
+        console.error(error);
 
-    const orders = db.prepare(`
-        SELECT
-            o.id,
-            o.total,
-            o.status,
-            o.created_at,
-            c.name AS customer_name,
-            c.mobile,
-            c.address
-        FROM orders o
-        JOIN customers c
-        ON o.customer_id = c.id
-        ORDER BY o.id DESC
-    `).all();
-
-    res.json(orders);
-});
-
-
-app.put("/api/orders/:id/status", (req, res) => {
-
-    const { status } = req.body;
-
-    db.prepare(`
-        UPDATE orders
-        SET status = ?
-        WHERE id = ?
-    `).run(
-        status,
-        req.params.id
-    );
-
-    res.json({
-        success: true
-    });
-});
-
-
-/* =========================
-   COMPLAINTS
-========================= */
-
-app.post("/api/complaints", (req, res) => {
-
-    const {
-        customer_name,
-        mobile,
-        message
-    } = req.body;
-
-    if (!message) {
-        return res.status(400).json({
-            error: "Message required"
+        res.status(500).json({
+            success: false,
+            message: "Product add nahi hua"
         });
     }
-
-    const result = db.prepare(`
-        INSERT INTO complaints
-        (customer_name, mobile, message)
-        VALUES (?, ?, ?)
-    `).run(
-        customer_name || "",
-        mobile || "",
-        message
-    );
-
-    res.json({
-        success: true,
-        id: result.lastInsertRowid
-    });
 });
 
+// UPDATE PRODUCT
+app.put("/api/products/:id", (req, res) => {
+    try {
+        const id = req.params.id;
 
+        const {
+            name,
+            price,
+            image,
+            description,
+            category,
+            stock
+        } = req.body;
+
+        const result = db.prepare(`
+            UPDATE products
+            SET
+                name = ?,
+                price = ?,
+                image = ?,
+                description = ?,
+                category = ?,
+                stock = ?
+            WHERE id = ?
+        `).run(
+            name,
+            Number(price),
+            image || "",
+            description || "",
+            category || "",
+            Number(stock || 0),
+            id
+        );
+
+        if (result.changes === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Product nahi mila"
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "Product updated"
+        });
+
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Product update nahi hua"
+        });
+    }
+});
+
+// DELETE PRODUCT
+app.delete("/api/products/:id", (req, res) => {
+    try {
+        const id = req.params.id;
+
+        const result = db
+            .prepare("DELETE FROM products WHERE id = ?")
+            .run(id);
+
+        if (result.changes === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Product nahi mila"
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "Product deleted"
+        });
+
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Product delete nahi hua"
+        });
+    }
+});
+
+// =====================================================
+// CUSTOMERS
+// =====================================================
+
+// ADD CUSTOMER
+app.post("/api/customers", (req, res) => {
+    try {
+        const {
+            name,
+            mobile,
+            email
+        } = req.body;
+
+        if (!mobile) {
+            return res.status(400).json({
+                success: false,
+                message: "Mobile required hai"
+            });
+        }
+
+        const existing = db
+            .prepare("SELECT * FROM customers WHERE mobile = ?")
+            .get(mobile);
+
+        if (existing) {
+            return res.json({
+                success: true,
+                customer: existing
+            });
+        }
+
+        const result = db.prepare(`
+            INSERT INTO customers
+            (name, mobile, email)
+            VALUES (?, ?, ?)
+        `).run(
+            name || "",
+            mobile,
+            email || ""
+        );
+
+        const customer = db
+            .prepare("SELECT * FROM customers WHERE id = ?")
+            .get(result.lastInsertRowid);
+
+        res.json({
+            success: true,
+            customer
+        });
+
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Customer save nahi hua"
+        });
+    }
+});
+
+// GET CUSTOMERS
+app.get("/api/customers", (req, res) => {
+    try {
+        const customers = db
+            .prepare("SELECT * FROM customers ORDER BY id DESC")
+            .all();
+
+        res.json(customers);
+
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Customers load nahi hue"
+        });
+    }
+});
+
+// CUSTOMER COUNT
+app.get("/api/customers/count", (req, res) => {
+    try {
+        const result = db
+            .prepare("SELECT COUNT(*) AS count FROM customers")
+            .get();
+
+        res.json(result);
+
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Customer count nahi mila"
+        });
+    }
+});
+
+// =====================================================
+// ORDERS
+// =====================================================
+
+// CREATE ORDER
+app.post("/api/orders", (req, res) => {
+    try {
+        const {
+            customer_id,
+            total,
+            address,
+            items
+        } = req.body;
+
+        if (!total || !items || !Array.isArray(items)) {
+            return res.status(400).json({
+                success: false,
+                message: "Order information incomplete hai"
+            });
+        }
+
+        const createOrder = db.transaction(() => {
+
+            const orderResult = db.prepare(`
+                INSERT INTO orders
+                (customer_id, total, address, status)
+                VALUES (?, ?, ?, ?)
+            `).run(
+                customer_id || null,
+                Number(total),
+                address || "",
+                "Pending"
+            );
+
+            const orderId = orderResult.lastInsertRowid;
+
+            const insertItem = db.prepare(`
+                INSERT INTO order_items
+                (order_id, product_id, quantity, price)
+                VALUES (?, ?, ?, ?)
+            `);
+
+            for (const item of items) {
+                insertItem.run(
+                    orderId,
+                    item.product_id,
+                    Number(item.quantity || 1),
+                    Number(item.price || 0)
+                );
+            }
+
+            return orderId;
+        });
+
+        const orderId = createOrder();
+
+        res.json({
+            success: true,
+            order_id: orderId,
+            message: "Order created successfully"
+        });
+
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Order create nahi hua"
+        });
+    }
+});
+
+// GET ORDERS
+app.get("/api/orders", (req, res) => {
+    try {
+        const orders = db.prepare(`
+            SELECT
+                orders.*,
+                customers.name AS customer_name,
+                customers.mobile AS customer_mobile
+            FROM orders
+            LEFT JOIN customers
+            ON orders.customer_id = customers.id
+            ORDER BY orders.id DESC
+        `).all();
+
+        res.json(orders);
+
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Orders load nahi hue"
+        });
+    }
+});
+
+// UPDATE ORDER STATUS
+app.put("/api/orders/:id/status", (req, res) => {
+    try {
+        const id = req.params.id;
+        const { status } = req.body;
+
+        const result = db.prepare(`
+            UPDATE orders
+            SET status = ?
+            WHERE id = ?
+        `).run(status, id);
+
+        if (result.changes === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Order nahi mila"
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "Order status updated"
+        });
+
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Status update nahi hua"
+        });
+    }
+});
+
+// =====================================================
+// COMPLAINTS
+// =====================================================
+
+// ADD COMPLAINT
+app.post("/api/complaints", (req, res) => {
+    try {
+        const {
+            customer_name,
+            mobile,
+            message
+        } = req.body;
+
+        if (!message) {
+            return res.status(400).json({
+                success: false,
+                message: "Complaint message required hai"
+            });
+        }
+
+        const result = db.prepare(`
+            INSERT INTO complaints
+            (customer_name, mobile, message)
+            VALUES (?, ?, ?)
+        `).run(
+            customer_name || "",
+            mobile || "",
+            message
+        );
+
+        res.json({
+            success: true,
+            complaint_id: result.lastInsertRowid,
+            message: "Complaint submitted"
+        });
+
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Complaint save nahi hui"
+        });
+    }
+});
+
+// GET COMPLAINTS
 app.get("/api/complaints", (req, res) => {
+    try {
+        const complaints = db
+            .prepare("SELECT * FROM complaints ORDER BY id DESC")
+            .all();
 
-    const complaints = db.prepare(`
-        SELECT *
-        FROM complaints
-        ORDER BY id DESC
-    `).all();
+        res.json(complaints);
 
-    res.json(complaints);
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Complaints load nahi hui"
+        });
+    }
 });
 
-
-/* =========================
-   SALES
-========================= */
+// =====================================================
+// SALES
+// =====================================================
 
 app.get("/api/sales", (req, res) => {
+    try {
+        const result = db.prepare(`
+            SELECT
+                COUNT(*) AS total_orders,
+                COALESCE(SUM(total), 0) AS total_sales
+            FROM orders
+            WHERE status != 'Cancelled'
+        `).get();
 
-    const result = db.prepare(`
-        SELECT
-            COUNT(*) AS total_orders,
-            COALESCE(SUM(total), 0) AS total_sales
-        FROM orders
-    `).get();
+        res.json(result);
 
-    res.json(result);
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Sales data load nahi hua"
+        });
+    }
 });
 
+// =====================================================
+// OWNER - SEND OTP
+// =====================================================
 
-/* =========================
-   START SERVER
-========================= */
+app.post("/api/owner/send-otp", async (req, res) => {
+    try {
+        const { mobile } = req.body;
+
+        if (!mobile) {
+            return res.status(400).json({
+                success: false,
+                message: "Mobile number required"
+            });
+        }
+
+        if (mobile !== OWNER_MOBILE) {
+            return res.status(403).json({
+                success: false,
+                message: "Owner number allowed nahi hai"
+            });
+        }
+
+        if (!MSG91_AUTHKEY || !MSG91_TEMPLATE_ID) {
+            return res.status(500).json({
+                success: false,
+                message: "MSG91 server par configure nahi hai"
+            });
+        }
+
+        const response = await fetch(
+            `https://control.msg91.com/api/v5/otp?template_id=${encodeURIComponent(
+                MSG91_TEMPLATE_ID
+            )}&mobile=91${OWNER_MOBILE}`,
+            {
+                method: "POST",
+                headers: {
+                    authkey: MSG91_AUTHKEY,
+                    "Content-Type": "application/json"
+                }
+            }
+        );
+
+        const data = await response.json();
+
+        console.log("MSG91 Send OTP:", data);
+
+        if (!response.ok || data.type !== "success") {
+            return res.status(500).json({
+                success: false,
+                message: "OTP send nahi ho paya"
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "OTP sent successfully"
+        });
+
+    } catch (error) {
+        console.error("Send OTP Error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "OTP server error"
+        });
+    }
+});
+
+// =====================================================
+// OWNER - VERIFY OTP
+// =====================================================
+
+app.post("/api/owner/verify-otp", async (req, res) => {
+    try {
+        const {
+            mobile,
+            otp
+        } = req.body;
+
+        if (!mobile || !otp) {
+            return res.status(400).json({
+                success: false,
+                message: "Mobile aur OTP required hai"
+            });
+        }
+
+        if (mobile !== OWNER_MOBILE) {
+            return res.status(403).json({
+                success: false,
+                message: "Owner number allowed nahi hai"
+            });
+        }
+
+        if (!MSG91_AUTHKEY) {
+            return res.status(500).json({
+                success: false,
+                message: "MSG91 server par configure nahi hai"
+            });
+        }
+
+        const response = await fetch(
+            `https://control.msg91.com/api/v5/otp/verify?otp=${encodeURIComponent(
+                otp
+            )}&mobile=91${OWNER_MOBILE}`,
+            {
+                method: "GET",
+                headers: {
+                    authkey: MSG91_AUTHKEY
+                }
+            }
+        );
+
+        const data = await response.json();
+
+        console.log("MSG91 Verify OTP:", data);
+
+        if (!response.ok || data.type !== "success") {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid ya expired OTP"
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "Owner login successful"
+        });
+
+    } catch (error) {
+        console.error("Verify OTP Error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "OTP verification error"
+        });
+    }
+});
+
+// =====================================================
+// START SERVER
+// =====================================================
 
 app.listen(PORT, () => {
-
-    console.log(
-        `Kit Kit Fashion backend running on port ${PORT}`
-    );
-
+    console.log(`Kit Kit Fashion Backend running on port ${PORT}`);
 });
